@@ -237,19 +237,33 @@ async def data_analyst_agent(request: Request):
             # Return the response in the format requested by the questions
             answer = result["answer"]
             
-            # Try to parse as JSON if it looks like JSON
+            # Check if response contains JSON format
+            logger.info(f"JSON format detected in query")
+            
             try:
                 import json
                 import re
                 
+                # Log original answer for debugging
+                logger.info(f"Original answer starts with: {answer[:100]}")
+                
                 # Remove markdown code blocks if present
                 cleaned_answer = re.sub(r'```(?:json)?\s*', '', answer.strip())
+                cleaned_answer = re.sub(r'```\s*$', '', cleaned_answer)
                 cleaned_answer = cleaned_answer.strip('`').strip()
                 
+                logger.info(f"Removed ```json wrapper, now starts with: {cleaned_answer[:50]}")
+                
+                # More aggressive JSON detection and parsing
                 if cleaned_answer.startswith('{') or cleaned_answer.startswith('['):
-                    return json.loads(cleaned_answer)
+                    logger.info(f"Attempting to parse JSON, cleaned answer starts with: {cleaned_answer[:100]}")
+                    parsed_json = json.loads(cleaned_answer)
+                    logger.info(f"Successfully parsed JSON in first block: {type(parsed_json)}")
+                    return parsed_json
+                    
             except Exception as json_error:
-                logger.info(f"Could not parse as JSON: {json_error}")
+                logger.error(f"JSON parsing failed: {json_error}")
+                # If JSON parsing fails, still return the cleaned answer
                 pass
             
             return answer
@@ -407,27 +421,83 @@ async def analyze_data(
             
             # Try to parse the answer as JSON first if question requests JSON
             if "json" in query_lower:
+                logger.info("JSON format detected in query")
                 # Try to extract JSON from the response
                 try:
                     # Remove markdown code blocks if present
-                    clean_answer = answer
-                    if '```json' in answer:
-                        start = answer.find('```json') + 7
-                        end = answer.find('```', start)
-                        if end != -1:
-                            clean_answer = answer[start:end].strip()
-                    elif '```' in answer:
-                        start = answer.find('```') + 3
-                        end = answer.find('```', start)
-                        if end != -1:
-                            clean_answer = answer[start:end].strip()
+                    clean_answer = answer.strip()
+                    logger.info(f"Original answer starts with: {answer[:100]}")
+                    
+                    if '```json' in clean_answer:
+                        start = clean_answer.find('```json') + 7
+                        end = clean_answer.rfind('```')
+                        if end != -1 and end > start:
+                            clean_answer = clean_answer[start:end].strip()
+                            logger.info(f"Removed ```json wrapper, now starts with: {clean_answer[:50]}")
+                        else:
+                            # No closing ```, just remove the opening ```json\n
+                            clean_answer = clean_answer[start:].strip()
+                            logger.info(f"No closing ```, removed opening only, now starts with: {clean_answer[:50]}")
+                    elif '```' in clean_answer and clean_answer.count('```') >= 2:
+                        start = clean_answer.find('```') + 3
+                        end = clean_answer.rfind('```')
+                        if end != -1 and end > start:
+                            clean_answer = clean_answer[start:end].strip()
+                            logger.info(f"Removed ``` wrapper, now starts with: {clean_answer[:50]}")
+                        else:
+                            logger.warning(f"Failed to find closing ```, start={start}, end={end}")
                     
                     # Try to parse as JSON
                     if clean_answer.startswith('{') or clean_answer.startswith('['):
-                        parsed = json.loads(clean_answer)
-                        return parsed
-                except json.JSONDecodeError:
+                        logger.info(f"Attempting to parse JSON, cleaned answer starts with: {clean_answer[:150]}")
+                        try:
+                            parsed = json.loads(clean_answer)
+                            logger.info(f"Successfully parsed JSON in first block: {type(parsed)}")
+                            return parsed
+                        except json.JSONDecodeError as e:
+                            # Handle base64 encoding issues that break JSON
+                            logger.warning(f"JSON parse error due to base64: {e}")
+                            # Try to fix common base64 issues
+                            import re
+                            # Find base64 fields and attempt to fix them
+                            fixed_answer = re.sub(r'"data:image/png;base64,[^"]*"', '"data:image/png;base64,PLACEHOLDER"', clean_answer)
+                            try:
+                                parsed = json.loads(fixed_answer)
+                                logger.info("Successfully parsed JSON after fixing base64 issues")
+                                return parsed
+                            except json.JSONDecodeError:
+                                logger.warning("Failed to parse even after base64 fix")
+                                pass
+                    else:
+                        logger.warning(f"Clean answer doesn't start with {{ or [, starts with: {clean_answer[:50]}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"JSON parse error in first block: {e}")
                     pass
+            
+            # Always try JSON parsing for any response that looks like JSON
+            try:
+                # Remove markdown code blocks if present
+                clean_answer = answer.strip()
+                if '```json' in clean_answer:
+                    start = clean_answer.find('```json') + 7
+                    end = clean_answer.rfind('```')
+                    if end != -1 and end > start:
+                        clean_answer = clean_answer[start:end].strip()
+                elif '```' in clean_answer and clean_answer.count('```') >= 2:
+                    start = clean_answer.find('```') + 3
+                    end = clean_answer.rfind('```')
+                    if end != -1 and end > start:
+                        clean_answer = clean_answer[start:end].strip()
+                
+                # Try to parse as JSON
+                if clean_answer.startswith('{') or clean_answer.startswith('['):
+                    import json
+                    parsed = json.loads(clean_answer)
+                    logger.info(f"Successfully parsed JSON response: {type(parsed)}")
+                    return parsed
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parse error: {e}")
+                pass
             
             # Handle simple format requests (single word, sentence)
             if any(phrase in query_lower for phrase in ["single word", "one word", "in a word", "answer in a single word"]):
@@ -444,7 +514,19 @@ async def analyze_data(
                 # Only use IIT Madras 4-element array when specifically requested
                 return format_iit_madras_response(result, query_text)
             
-            # For all other questions, return the answer exactly as OpenAI provided it
+            # For all other questions, try to parse as JSON if it looks like JSON, otherwise return as string
+            try:
+                clean_answer = answer.strip()
+                if clean_answer.startswith('{') or clean_answer.startswith('['):
+                    import json
+                    parsed = json.loads(clean_answer)
+                    logger.info(f"Final JSON parsing successful: {type(parsed)}")
+                    return parsed
+            except json.JSONDecodeError as e:
+                logger.warning(f"Final JSON parse failed: {e}")
+                pass
+            
+            # Return as string if not JSON
             return answer.strip()
         else:
             # Handle errors
