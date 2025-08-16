@@ -40,8 +40,10 @@ class UnifiedDataAgent:
         Parse the questions file to extract exact field names and types required by IIT Madras.
         Returns: keys_list, type_map
         """
-        pattern = r"-\s*`([^`]+)`\s*:\s*(\w+)"
+        # Enhanced regex to capture full type descriptions (not just single words)
+        pattern = r"-\s*`([^`]+)`\s*:\s*([^\n]+)"
         matches = re.findall(pattern, raw_questions)
+        
         type_map_def = {
             "number": float,
             "string": str,
@@ -49,8 +51,26 @@ class UnifiedDataAgent:
             "int": int,
             "float": float
         }
-        type_map = {key: type_map_def.get(t.lower(), str) for key, t in matches}
-        keys_list = [k for k, _ in matches]
+        
+        # Enhanced type mapping to handle complex descriptions
+        type_map = {}
+        keys_list = []
+        
+        for key, type_desc in matches:
+            keys_list.append(key)
+            type_desc_lower = type_desc.strip().lower()
+            
+            # Handle complex type descriptions
+            if "number" in type_desc_lower:
+                type_map[key] = float
+            elif "string" in type_desc_lower or "base64" in type_desc_lower:
+                type_map[key] = str
+            elif "integer" in type_desc_lower or "int" in type_desc_lower:
+                type_map[key] = int
+            else:
+                # Default to string for any unrecognized types
+                type_map[key] = str
+        
         return keys_list, type_map
     
     def create_plot_to_base64_helper(self):
