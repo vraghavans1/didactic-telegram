@@ -380,6 +380,7 @@ Generate Python code that:
 3. Creates charts using plot_to_base64() function for any visualization fields
 4. Stores all results in a 'results' dictionary with EXACT field names above
 5. Handles any data format variations robustly
+6. Uses proper error handling for empty sequences and edge cases
 
 Important rules:
 - Use ONLY real data calculations
@@ -388,6 +389,12 @@ Important rules:
 - For sales data, calculate actual totals, correlations, and statistics
 - For weather data, compute real temperature and precipitation metrics
 - All numerical values must be calculated from the actual dataset
+- Always check if sequences are empty before using min(), max(), or similar functions
+- Use try-except blocks for operations that might fail with empty data
+- When filtering data returns empty results, handle gracefully with fallback values or None
+- Temperature line charts MUST use red color (color='red')
+- Precipitation histograms MUST use orange bars (color='orange')
+- Ensure chart axes are visible and properly labeled
 
 Generate ONLY the Python code, no explanations:
 """
@@ -798,6 +805,14 @@ Important rules:
 - Use .str.extract() for complex string parsing instead of simple replacements
 - Always check data types and handle missing/invalid values gracefully
 
+CRITICAL ERROR HANDLING:
+- For currency parsing, handle ALL formats: "$1.5B", "1.5 billion", "1,500 million", "$1.500B", "1.50B"
+- Use regex patterns to extract numbers: r'(\d+\.?\d*).*?billion|(\d+\.?\d*).*?B' 
+- When filtering lists, ALWAYS check if result is empty before using min() or max()
+- Use this pattern: filtered = [x for x in data if condition]; result = min(filtered) if filtered else "No matches found"
+- For empty sequences, return meaningful defaults like "0", "No data", or "No matches found"
+- Convert currency strings robustly: remove $, B, billion, comma separators before numeric conversion
+
 Generate ONLY the Python code, no explanations:
 """
 
@@ -883,11 +898,11 @@ Generate ONLY the Python code, no explanations:
                 new_width = int(width * ratio)
                 new_height = int(height * ratio)
                 try:
-                    # Try modern PIL resampling constant first
-                    if hasattr(Image, 'LANCZOS'):
-                        image = image.resize((new_width, new_height), Image.LANCZOS)
-                    elif hasattr(Image, 'Resampling') and hasattr(Image.Resampling, 'LANCZOS'):
+                    # Use modern PIL resampling constant
+                    if hasattr(Image, 'Resampling') and hasattr(Image.Resampling, 'LANCZOS'):
                         image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    elif hasattr(Image, 'LANCZOS'):
+                        image = image.resize((new_width, new_height), Image.LANCZOS)
                     else:
                         # Fallback to basic resizing
                         image = image.resize((new_width, new_height))

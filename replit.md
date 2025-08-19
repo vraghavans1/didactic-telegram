@@ -13,7 +13,11 @@ This AI-powered data analysis service processes natural language queries to perf
 ### Deployment Ready Structure
 - `api/index.py`: FastAPI REST API with unified agent integration and multipart form handling.
 - `unified_data_agent.py`: Primary agent for multi-format file processing using OpenAI.
+- `start.py`: Primary deployment entry point (matches `.replit` configuration).
+- `main.py`: Alternative entry point for various deployment platforms.
+- `app.py`: Simple app instance access for deployment compatibility.
 - `requirements.txt`: Project dependencies.
+- `Procfile`: Multi-platform deployment configuration.
 - `Procfile.replit`: Replit deployment configuration.
 - `README.md`: Project documentation.
 - `replit.md`: Architecture documentation and user preferences.
@@ -54,3 +58,21 @@ The application employs a unified architecture emphasizing format compliance and
 - **Core Libraries**: FastAPI, pandas, numpy, matplotlib, networkx, seaborn.
 - **File Processing**: `openpyxl` (Excel), `PyPDF2` (PDF), `sqlite3` (SQLite databases), `PIL` (images).
 - **Enhanced Features**: `opencv-python`, `pytesseract` (OCR), `aiofiles` (asynchronous file operations), `trafilatura` (advanced web scraping).
+
+## Recent Changes
+
+### Deployment Configuration Fixed (August 19, 2025)
+**Issue**: Deployment was failing because `.replit` configuration tried to run `python start.py` but the file didn't exist.
+
+**Resolution**:
+- Created `start.py`: Primary deployment entry point that imports FastAPI app and runs with uvicorn
+- Created `main.py`: Alternative entry point for other deployment platforms  
+- Created `app.py`: Simple app instance access for deployment compatibility
+- Added `Procfile`: Multi-platform deployment configuration with web and alternative options
+- Updated documentation to reflect new deployment structure
+
+**Deployment Options Now Available**:
+1. `python start.py` (matches current `.replit` config)
+2. `python main.py` (alternative entry point)
+3. `uvicorn api.index:app --host 0.0.0.0 --port 5000` (direct uvicorn)
+4. Import `app` from `app.py` or `main.py` (for platforms that auto-detect)
