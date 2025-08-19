@@ -165,22 +165,25 @@ async def analyze_data(request: Request):
                     if hasattr(value, "filename") and hasattr(value, "read") and getattr(value, "filename", None):
                         # It's a file upload - SAVE TO DISK
                         file_content = await value.read()
-                        original_filename = value.filename
-                        file_path = os.path.join(request_folder, original_filename)
-                        
-                        # Save file to disk
-                        async with aiofiles.open(file_path, "wb") as f:
-                            await f.write(file_content)
-                        
-                        saved_files[field_name] = file_path
-                        logger.info(f"💾 Saved file to disk: {file_path} (size: {len(file_content)} bytes)")
-                        
-                        # Extract question from question.txt files
-                        if original_filename.lower() == "question.txt" or "question" in original_filename.lower():
-                            async with aiofiles.open(file_path, "r") as f:
-                                question_text = await f.read()
-                                question_text = question_text.strip()
-                            logger.info(f"✅ Found question in {original_filename}: {question_text[:150]}...")
+                        original_filename = getattr(value, "filename", "unknown_file")
+                        if original_filename:
+                            file_path = os.path.join(request_folder, original_filename)
+                            
+                            # Save file to disk
+                            async with aiofiles.open(file_path, "wb") as f:
+                                await f.write(file_content)
+                            
+                            saved_files[field_name] = file_path
+                            logger.info(f"💾 Saved file to disk: {file_path} (size: {len(file_content)} bytes)")
+                            
+                            # Extract question from question.txt files
+                            if original_filename and (original_filename.lower() == "question.txt" or "question" in original_filename.lower()):
+                                async with aiofiles.open(file_path, "r") as f:
+                                    question_text = await f.read()
+                                    question_text = question_text.strip()
+                                logger.info(f"✅ Found question in {original_filename}: {question_text[:150]}...")
+                        else:
+                            logger.warning("File upload without filename detected")
                     
                     else:
                         # It's a regular form field
